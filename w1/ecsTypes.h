@@ -111,3 +111,8 @@ struct Team
 
 struct TextureSource {};
 
+struct HealCooldown
+{
+  int cooldown = 10;
+  int cur = 0;
+};

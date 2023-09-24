@@ -24,6 +24,30 @@ static void add_patrol_attack_flee_sm(flecs::entity entity)
   });
 }
 
+static void add_healer_swordsman_sm(flecs::entity entity, int heal_cooldown = 10)
+{
+  entity.set([&](HealCooldown &cd)
+  {
+    cd.cooldown = heal_cooldown;
+    cd.cur = heal_cooldown;
+  });
+
+  entity.get([](StateMachine &sm)
+  {
+    int moveToEnemy = sm.addState(create_move_to_enemy_state());
+    int followAlly = sm.addState(create_follow_ally_state());
+    int healAlly = sm.addState(create_heal_closest_ally_state(30.f));
+
+    sm.addTransition(create_enemy_available_transition(3.f), followAlly, moveToEnemy);
+    sm.addTransition(create_or_transition(create_negate_transition(create_ally_available_transition(10.f)), create_negate_transition(create_enemy_available_transition(5.f))), moveToEnemy, followAlly);
+
+    sm.addTransition(create_and_transition(create_and_transition(create_heal_available_transition(), create_ally_available_transition(7.f)), create_closest_ally_hitpoints_less_than_transition(60.f)), followAlly, healAlly);
+    sm.addTransition(create_and_transition(create_and_transition(create_heal_available_transition(), create_ally_available_transition(7.f)), create_closest_ally_hitpoints_less_than_transition(60.f)), moveToEnemy, healAlly);
+
+    sm.addTransition(create_negate_transition(create_heal_available_transition()), healAlly, followAlly);
+  });
+}
+
 static void add_patrol_flee_sm(flecs::entity entity)
 {
   entity.get([](StateMachine &sm)
@@ -97,6 +121,20 @@ static flecs::entity create_monster(flecs::world &ecs, int x, int y, Color color
     .set(Team{1})
     .set(NumActions{1, 0})
     .set(MeleeDamage{20.f});
+}
+
+static flecs::entity create_ally(flecs::world &ecs, int x, int y, Color color)
+{
+  return ecs.entity()
+    .set(Position{x, y})
+    .set(MovePos{x, y})
+    .set(Hitpoints{150.f})
+    .set(Action{EA_NOP})
+    .set(Color{color})
+    .set(StateMachine{})
+    .set(Team{0})
+    .set(NumActions{1, 0})
+    .set(MeleeDamage{30.f});
 }
 
 static void create_player(flecs::world &ecs, int x, int y)
@@ -182,6 +220,8 @@ void init_roguelike(flecs::world &ecs)
   add_berserk_sm(create_monster(ecs, -5, 3, Color(255, 0, 128, 255)));
   add_healer_sm(create_monster(ecs, 5, 0, Color(0, 128, 128, 255)));
 
+  add_healer_swordsman_sm(create_ally(ecs, 0, 2, Color(128, 128, 100, 255)));
+
   create_player(ecs, 0, 0);
 
   create_powerup(ecs, 7, 7, 10.f);
@@ -226,6 +266,15 @@ static Position move_pos(Position pos, int action)
   else if (action == EA_MOVE_DOWN)
     pos.y++;
   return pos;
+}
+
+static void update_ai_timers(flecs::world &ecs)
+{
+  ecs.query<HealCooldown>()
+    .each([&](flecs::entity entity, HealCooldown &cd)
+    {
+      if (cd.cur < cd.cooldown) ++cd.cur;
+    });
 }
 
 static void process_actions(flecs::world &ecs)
@@ -313,6 +362,7 @@ void process_turn(flecs::world &ecs)
           sm.act(0.f, ecs, e);
         });
       });
+      update_ai_timers(ecs);
     }
     process_actions(ecs);
   }
