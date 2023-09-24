@@ -15,11 +15,11 @@ void StateMachine::act(float dt, flecs::world &ecs, flecs::entity entity)
 {
   if (curStateIdx < states.size())
   {
-    for (const std::pair<StateTransition*, int> &transition : transitions[curStateIdx])
-      if (transition.first->isAvailable(ecs, entity))
+    for (const auto [transition, destStateIdx] : transitions[curStateIdx])
+      if (transition->isAvailable(ecs, entity))
       {
         states[curStateIdx]->exit();
-        curStateIdx = transition.second;
+        curStateIdx = destStateIdx;
         states[curStateIdx]->enter();
         break;
       }

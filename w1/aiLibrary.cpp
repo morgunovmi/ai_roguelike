@@ -4,6 +4,7 @@
 #include "raylib.h"
 #include <cfloat>
 #include <cmath>
+#include <algorithm>
 
 class AttackEnemyState : public State
 {
@@ -118,6 +119,21 @@ public:
   }
 };
 
+class HealState : public State
+{
+private:
+  float healAmount;
+public:
+  HealState(float _healAmount) : healAmount(_healAmount) {}
+  void enter() const override {}
+  void exit() const override {}
+  void act(float /* dt*/, flecs::world &ecs, flecs::entity entity) const override {
+    entity.set([&](Hitpoints &hp) {
+      hp.hitpoints = std::clamp(hp.hitpoints + healAmount, 0.0f, 100.0f);
+    });
+  }
+};
+
 class NopState : public State
 {
 public:
@@ -225,6 +241,11 @@ State *create_flee_from_enemy_state()
 State *create_patrol_state(float patrol_dist)
 {
   return new PatrolState(patrol_dist);
+}
+
+State *create_heal_state(float heal_amount)
+{
+  return new HealState(heal_amount);
 }
 
 State *create_nop_state()
