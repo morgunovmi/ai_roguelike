@@ -27,6 +27,7 @@ static void create_minotaur_beh(flecs::entity e)
 static void create_collector_beh(flecs::entity e)
 {
   e.set(Blackboard{});
+  e.add<CanPickUp>();
   BehNode *root = 
     selector({
       sequence({
@@ -72,6 +73,7 @@ static void create_player(flecs::world &ecs, int x, int y, const char *texture_s
     //.set(Color{0xee, 0xee, 0xee, 0xff})
     .set(Action{EA_NOP})
     .add<IsPlayer>()
+    .add<CanPickUp>()
     .set(Team{0})
     .set(PlayerInput{})
     .set(NumActions{2, 0})
@@ -250,12 +252,12 @@ static void process_actions(flecs::world &ecs)
     });
   });
 
-  static auto playerPickup = ecs.query<const Position, Hitpoints, MeleeDamage>();
+  static auto pickuper = ecs.query<const CanPickUp, const Position, Hitpoints, MeleeDamage>();
   static auto healPickup = ecs.query<const Position, const HealAmount>();
   static auto powerupPickup = ecs.query<const Position, const PowerupAmount>();
   ecs.defer([&]
   {
-    playerPickup.each([&](const Position &pos, Hitpoints &hp, MeleeDamage &dmg)
+    pickuper.each([&](const CanPickUp&, const Position &pos, Hitpoints &hp, MeleeDamage &dmg)
     {
       healPickup.each([&](flecs::entity entity, const Position &ppos, const HealAmount &amt)
       {

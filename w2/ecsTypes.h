@@ -81,6 +81,7 @@ struct MeleeDamage
 };
 
 struct IsPickup {};
+struct CanPickUp {};
 
 struct HealAmount
 {
