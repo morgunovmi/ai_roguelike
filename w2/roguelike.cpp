@@ -2,6 +2,7 @@
 #include "ecsTypes.h"
 #include "raylib.h"
 #include "aiLibrary.h"
+#include "aiUtils.h"
 #include "blackboard.h"
 
 
@@ -47,6 +48,51 @@ static void create_collector_beh(flecs::entity e)
   e.set(BehaviourTree{root});
 }
 
+static flecs::entity create_waypoint_list(flecs::world &ecs, const std::vector<Position> &waypoints)
+{
+  if (waypoints.empty())
+    return flecs::entity();
+  
+  const auto firstPos = waypoints.front();
+  auto lastWaypoint = ecs.entity()
+                        .add<IsWaypoint>()
+                        .set(Position{firstPos.x, firstPos.y});
+
+  auto nextWp = lastWaypoint;
+  for (int i = 1; i < waypoints.size(); ++i)
+  {
+    const auto pos = waypoints[i];
+    const auto curWp = ecs.entity()
+      .add<IsWaypoint>()
+      .set(Position{pos.x, pos.y})
+      .set(NextWaypoint{nextWp});
+
+    nextWp = curWp;
+  }
+  lastWaypoint.set(NextWaypoint{nextWp});
+
+  return lastWaypoint;
+}
+
+static void create_guard_beh(flecs::entity e, flecs::world &ecs, const std::vector<Position> &waypoints)
+{
+  e.set(Blackboard{});
+  const auto lastWp = create_waypoint_list(ecs, waypoints);
+  reg_and_set_entity_blackboard_var(e, "waypoint", lastWp);
+  BehNode *root =
+    selector({
+      sequence({
+        find_enemy(e, 4.0f, "closest_enemy"),
+        move_to_entity(e, "closest_enemy")
+      }),
+      sequence({
+        move_to_entity(e, "waypoint"),
+        next_waypoint(e, "waypoint")
+      })
+    });
+  e.set(BehaviourTree{root});
+}
+
 static flecs::entity create_monster(flecs::world &ecs, int x, int y, Color col, const char *texture_src)
 {
   flecs::entity textureSrc = ecs.entity(texture_src);
@@ -60,6 +106,22 @@ static flecs::entity create_monster(flecs::world &ecs, int x, int y, Color col, 
     .set(Team{1})
     .set(NumActions{1, 0})
     .set(MeleeDamage{20.f})
+    .set(Blackboard{});
+}
+
+static flecs::entity create_ally(flecs::world &ecs, int x, int y, Color col, const char *texture_src)
+{
+  flecs::entity textureSrc = ecs.entity(texture_src);
+  return ecs.entity()
+    .set(Position{x, y})
+    .set(MovePos{x, y})
+    .set(Hitpoints{150.f})
+    .set(Action{EA_NOP})
+    .set(Color{col})
+    .add<TextureSource>(textureSrc)
+    .set(Team{0})
+    .set(NumActions{1, 0})
+    .set(MeleeDamage{40.f})
     .set(Blackboard{});
 }
 
@@ -157,11 +219,14 @@ void init_roguelike(flecs::world &ecs)
         UnloadTexture(texture);
       });
 
-  create_minotaur_beh(create_monster(ecs, 5, 5, Color{0xee, 0x00, 0xee, 0xff}, "minotaur_tex"));
-  create_minotaur_beh(create_monster(ecs, 10, -5, Color{0xee, 0x00, 0xee, 0xff}, "minotaur_tex"));
-  create_minotaur_beh(create_monster(ecs, -5, -5, Color{0x11, 0x11, 0x11, 0xff}, "minotaur_tex"));
+  create_minotaur_beh(create_monster(ecs, 7, 7, Color{0xee, 0x00, 0xee, 0xff}, "minotaur_tex"));
 
   create_collector_beh(create_monster(ecs, -5, 10, Color{0, 255, 0, 255}, "minotaur_tex"));
+  create_guard_beh(create_monster(ecs, 3, 5, Color{255, 0, 0, 255}, "minotaur_tex"),
+                   ecs, {{3, 5}, {3, -5}, {5, 3}});
+
+  create_guard_beh(create_ally(ecs, -3, 5, Color{0, 255, 0, 255}, "swordsman_tex"),
+                   ecs, {{-3, 5}, {-3, -5}, {0, 0}});
 
   create_player(ecs, 0, 0, "swordsman_tex");
 

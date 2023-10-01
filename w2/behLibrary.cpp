@@ -67,9 +67,7 @@ struct Parallel : public CompoundNode
 
 struct Not : public BehNode
 {
-private:
   BehNode *node;
-public:
   Not(BehNode *n) : node(n) {}
 
   Not(const Not &bt) = delete;
@@ -219,6 +217,21 @@ struct FindPickup : public BehNode
   }
 };
 
+struct NextWaypointNode : public BehNode
+{
+  size_t waypointBb = size_t(-1);
+  NextWaypointNode(flecs::entity entity, const char *bb_name)
+  {
+    waypointBb = reg_entity_blackboard_var<flecs::entity>(entity, bb_name);
+  }
+  BehResult update(flecs::world &, flecs::entity entity, Blackboard &bb) override
+  {
+    const auto curWp = bb.get<flecs::entity>(waypointBb);
+    bb.set<flecs::entity>(waypointBb, curWp.get<NextWaypoint>()->wp);
+    return BEH_SUCCESS;
+  }
+};
+
 struct Flee : public BehNode
 {
   size_t entityBb = size_t(-1);
@@ -334,5 +347,10 @@ BehNode *patrol(flecs::entity entity, float patrol_dist, const char *bb_name)
 BehNode *find_pickup(flecs::entity entity, const char *bb_name)
 {
   return new FindPickup(entity, bb_name);
+}
+
+BehNode *next_waypoint(flecs::entity entity, const char *bb_name)
+{
+  return new NextWaypointNode(entity, bb_name);
 }
 

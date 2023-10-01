@@ -82,6 +82,12 @@ struct MeleeDamage
 
 struct IsPickup {};
 struct CanPickUp {};
+struct IsWaypoint {};
+
+struct NextWaypoint
+{
+  flecs::entity wp;
+};
 
 struct HealAmount
 {

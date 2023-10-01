@@ -59,3 +59,15 @@ inline size_t reg_entity_blackboard_var(flecs::entity entity, const char *bb_nam
   return res;
 }
 
+template<typename T>
+inline size_t reg_and_set_entity_blackboard_var(flecs::entity entity, const char *bb_name, const T &val)
+{
+  size_t res = size_t(-1);
+  entity.set([&](Blackboard &bb)
+  {
+    res = bb.regName<T>(bb_name);
+    bb.set(res, val);
+  });
+  return res;
+}
+
