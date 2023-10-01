@@ -51,6 +51,49 @@ struct Selector : public CompoundNode
   }
 };
 
+struct Parallel : public CompoundNode
+{
+  BehResult update(flecs::world &ecs, flecs::entity entity, Blackboard &bb) override
+  {
+    for (BehNode *node : nodes)
+    {
+      BehResult res = node->update(ecs, entity, bb);
+      if (res != BEH_RUNNING)
+        return res;
+    }
+    return BEH_RUNNING;
+  }
+};
+
+struct Not : public BehNode
+{
+private:
+  BehNode *node;
+public:
+  Not(BehNode *n) : node(n) {}
+
+  Not(const Not &bt) = delete;
+  Not(Not &&bt) = default;
+
+  Not &operator=(const Not &bt) = delete;
+  Not &operator=(Not &&bt) = default;
+
+  ~Not() { delete node; }
+
+  BehResult update(flecs::world &ecs, flecs::entity entity, Blackboard &bb) override
+  {
+    switch (node->update(ecs, entity, bb))
+    {
+      case BEH_SUCCESS:
+        return BEH_FAIL;
+      case BEH_FAIL:
+        return BEH_SUCCESS;
+      case BEH_RUNNING:
+        return BEH_RUNNING;
+    }
+  }
+};
+
 struct MoveToEntity : public BehNode
 {
   size_t entityBb = size_t(-1); // wraps to 0xff...
@@ -140,6 +183,42 @@ struct FindEnemy : public BehNode
   }
 };
 
+struct FindPickup : public BehNode
+{
+  size_t entityBb = size_t(-1);
+  FindPickup(flecs::entity entity, const char *bb_name)
+  {
+    entityBb = reg_entity_blackboard_var<flecs::entity>(entity, bb_name);
+  }
+  BehResult update(flecs::world &ecs, flecs::entity entity, Blackboard &bb) override
+  {
+    BehResult res = BEH_FAIL;
+    static auto pickupQuery = ecs.query<const Position, const IsPickup>();
+    entity.set([&](const Position &pos)
+    {
+      flecs::entity closestPickup;
+      float closestDist = FLT_MAX;
+      Position closestPos;
+      pickupQuery.each([&](flecs::entity pickup, const Position &ppos, const IsPickup &)
+      {
+        float curDist = dist(ppos, pos);
+        if (curDist < closestDist)
+        {
+          closestDist = curDist;
+          closestPos = ppos;
+          closestPickup = pickup;
+        }
+      });
+      if (ecs.is_valid(closestPickup))
+      {
+        bb.set<flecs::entity>(entityBb, closestPickup);
+        res = BEH_SUCCESS;
+      }
+    });
+    return res;
+  }
+};
+
 struct Flee : public BehNode
 {
   size_t entityBb = size_t(-1);
@@ -214,6 +293,19 @@ BehNode *selector(const std::vector<BehNode*> &nodes)
   return sel;
 }
 
+BehNode *parallel(const std::vector<BehNode*> &nodes)
+{
+  Parallel *sel = new Parallel;
+  for (BehNode *node : nodes)
+    sel->pushNode(node);
+  return sel;
+}
+
+BehNode *not_node(BehNode *node)
+{
+  return new Not(node);
+}
+
 BehNode *move_to_entity(flecs::entity entity, const char *bb_name)
 {
   return new MoveToEntity(entity, bb_name);
@@ -237,5 +329,10 @@ BehNode *flee(flecs::entity entity, const char *bb_name)
 BehNode *patrol(flecs::entity entity, float patrol_dist, const char *bb_name)
 {
   return new Patrol(entity, patrol_dist, bb_name);
+}
+
+BehNode *find_pickup(flecs::entity entity, const char *bb_name)
+{
+  return new FindPickup(entity, bb_name);
 }
 

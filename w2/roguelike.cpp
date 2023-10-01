@@ -1,7 +1,6 @@
 #include "roguelike.h"
 #include "ecsTypes.h"
 #include "raylib.h"
-#include "stateMachine.h"
 #include "aiLibrary.h"
 #include "blackboard.h"
 
@@ -25,6 +24,28 @@ static void create_minotaur_beh(flecs::entity e)
   e.set(BehaviourTree{root});
 }
 
+static void create_collector_beh(flecs::entity e)
+{
+  e.set(Blackboard{});
+  BehNode *root = 
+    selector({
+      sequence({
+        find_enemy(e, 2.0f, "closest_enemy"),
+        move_to_entity(e, "closest_enemy")
+      }),
+      sequence({
+        find_pickup(e, "target_pickup"),
+        move_to_entity(e, "target_pickup")
+      }),
+      sequence({
+        find_enemy(e, INFINITY, "any_enemy"),
+        move_to_entity(e, "any_enemy")
+      }),
+      patrol(e, 2.f, "patrol_pos")
+    });
+  e.set(BehaviourTree{root});
+}
+
 static flecs::entity create_monster(flecs::world &ecs, int x, int y, Color col, const char *texture_src)
 {
   flecs::entity textureSrc = ecs.entity(texture_src);
@@ -35,7 +56,6 @@ static flecs::entity create_monster(flecs::world &ecs, int x, int y, Color col, 
     .set(Action{EA_NOP})
     .set(Color{col})
     .add<TextureSource>(textureSrc)
-    .set(StateMachine{})
     .set(Team{1})
     .set(NumActions{1, 0})
     .set(MeleeDamage{20.f})
@@ -64,6 +84,7 @@ static void create_heal(flecs::world &ecs, int x, int y, float amount)
 {
   ecs.entity()
     .set(Position{x, y})
+    .add<IsPickup>()
     .set(HealAmount{amount})
     .set(Color{0xff, 0x44, 0x44, 0xff});
 }
@@ -72,6 +93,7 @@ static void create_powerup(flecs::world &ecs, int x, int y, float amount)
 {
   ecs.entity()
     .set(Position{x, y})
+    .add<IsPickup>()
     .set(PowerupAmount{amount})
     .set(Color{0xff, 0xff, 0x00, 0xff});
 }
@@ -136,7 +158,8 @@ void init_roguelike(flecs::world &ecs)
   create_minotaur_beh(create_monster(ecs, 5, 5, Color{0xee, 0x00, 0xee, 0xff}, "minotaur_tex"));
   create_minotaur_beh(create_monster(ecs, 10, -5, Color{0xee, 0x00, 0xee, 0xff}, "minotaur_tex"));
   create_minotaur_beh(create_monster(ecs, -5, -5, Color{0x11, 0x11, 0x11, 0xff}, "minotaur_tex"));
-  create_minotaur_beh(create_monster(ecs, -5, 5, Color{0, 255, 0, 255}, "minotaur_tex"));
+
+  create_collector_beh(create_monster(ecs, -5, 10, Color{0, 255, 0, 255}, "minotaur_tex"));
 
   create_player(ecs, 0, 0, "swordsman_tex");
 
@@ -227,12 +250,12 @@ static void process_actions(flecs::world &ecs)
     });
   });
 
-  static auto playerPickup = ecs.query<const IsPlayer, const Position, Hitpoints, MeleeDamage>();
+  static auto playerPickup = ecs.query<const Position, Hitpoints, MeleeDamage>();
   static auto healPickup = ecs.query<const Position, const HealAmount>();
   static auto powerupPickup = ecs.query<const Position, const PowerupAmount>();
   ecs.defer([&]
   {
-    playerPickup.each([&](const IsPlayer&, const Position &pos, Hitpoints &hp, MeleeDamage &dmg)
+    playerPickup.each([&](const Position &pos, Hitpoints &hp, MeleeDamage &dmg)
     {
       healPickup.each([&](flecs::entity entity, const Position &ppos, const HealAmount &amt)
       {
@@ -256,7 +279,6 @@ static void process_actions(flecs::world &ecs)
 
 void process_turn(flecs::world &ecs)
 {
-  static auto stateMachineAct = ecs.query<StateMachine>();
   static auto behTreeUpdate = ecs.query<BehaviourTree, Blackboard>();
   if (is_player_acted(ecs))
   {
@@ -265,10 +287,6 @@ void process_turn(flecs::world &ecs)
       // Plan action for NPCs
       ecs.defer([&]
       {
-        stateMachineAct.each([&](flecs::entity e, StateMachine &sm)
-        {
-          sm.act(0.f, ecs, e);
-        });
         behTreeUpdate.each([&](flecs::entity e, BehaviourTree &bt, Blackboard &bb)
         {
           bt.update(ecs, e, bb);

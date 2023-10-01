@@ -80,6 +80,8 @@ struct MeleeDamage
   float damage = 2.f;
 };
 
+struct IsPickup {};
+
 struct HealAmount
 {
   float amount = 0.f;
