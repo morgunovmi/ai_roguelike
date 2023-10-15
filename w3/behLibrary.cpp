@@ -225,6 +225,35 @@ struct Patrol : public BehNode
   }
 };
 
+struct MoveToBase : public BehNode
+{
+  BehResult update(flecs::world &, flecs::entity entity, Blackboard &bb) override
+  {
+    BehResult res = BEH_RUNNING;
+    entity.set([&](Action &a, const Position &pos, const PatrolPos &ppos)
+    {
+      if (dist(pos, ppos) != 0)
+        a.action = move_towards(pos, ppos);
+      else
+        res = BEH_SUCCESS;
+    });
+    return res;
+  }
+};
+
+struct RandomExplore : public BehNode
+{
+  BehResult update(flecs::world &, flecs::entity entity, Blackboard &bb) override
+  {
+    BehResult res = BEH_RUNNING;
+    entity.set([&](Action &a, const Position &pos)
+    {
+      a.action = GetRandomValue(EA_MOVE_START, EA_MOVE_END - 1); // do a random walk
+    });
+    return res;
+  }
+};
+
 struct PatchUp : public BehNode
 {
   float hpThreshold = 100.f;
@@ -292,6 +321,16 @@ BehNode *flee(flecs::entity entity, const char *bb_name)
 BehNode *patrol(flecs::entity entity, float patrol_dist, const char *bb_name)
 {
   return new Patrol(entity, patrol_dist, bb_name);
+}
+
+BehNode *move_to_base()
+{
+  return new MoveToBase();
+}
+
+BehNode *random_explore()
+{
+  return new RandomExplore();
 }
 
 BehNode *patch_up(float thres)
