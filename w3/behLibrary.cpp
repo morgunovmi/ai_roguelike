@@ -5,6 +5,8 @@
 #include "raylib.h"
 #include "blackboard.h"
 #include <algorithm>
+#include <random>
+#include <iterator>
 
 struct CompoundNode : public BehNode
 {
@@ -72,6 +74,53 @@ struct UtilitySelector : public BehNode
     {
       size_t nodeIdx = node.second;
       BehResult res = utilityNodes[nodeIdx].first->update(ecs, entity, bb);
+      if (res != BEH_FAIL)
+        return res;
+    }
+    return BEH_FAIL;
+  }
+};
+
+// Shamelessly stolen https://stackoverflow.com/questions/50221136/c-weighted-stdshuffle
+template <class D, class W>
+void weighted_shuffle(D first, D last, W first_weight, W last_weight)
+{
+  std::default_random_engine dre{42};
+  while (first != last && first_weight != last_weight)
+  {
+    std::discrete_distribution dd(first_weight, last_weight);
+    auto i = dd(dre);
+    if ( i )
+    {
+      std::iter_swap(first, std::next(first, i));
+      std::iter_swap(first_weight, std::next(first_weight, i));
+    }
+    ++first;
+    ++first_weight;
+  }
+}
+
+struct WeightedUtilitySelector : public BehNode
+{
+  std::vector<std::pair<BehNode*, utility_function>> utilityNodes;
+
+  BehResult update(flecs::world &ecs, flecs::entity entity, Blackboard &bb) override
+  {
+    std::vector<BehNode*> goodUtilityNodes;
+    std::vector<float> utilityScores;
+    for (const auto [node, utility_func] : utilityNodes)
+    {
+      const float utilityScore = utility_func(bb);
+      if (utilityScore > 0)
+      {
+        goodUtilityNodes.push_back(node);
+        utilityScores.push_back(utilityScore);
+      }
+    }
+    weighted_shuffle(goodUtilityNodes.begin(), goodUtilityNodes.end(), utilityScores.begin(), utilityScores.end());
+    for (auto *node : goodUtilityNodes)
+    {
+      BehResult res = node->update(ecs, entity, bb);
       if (res != BEH_FAIL)
         return res;
     }
@@ -294,6 +343,13 @@ BehNode *selector(const std::vector<BehNode*> &nodes)
 BehNode *utility_selector(const std::vector<std::pair<BehNode*, utility_function>> &nodes)
 {
   UtilitySelector *usel = new UtilitySelector;
+  usel->utilityNodes = std::move(nodes);
+  return usel;
+}
+
+BehNode *weighted_utility_selector(const std::vector<std::pair<BehNode*, utility_function>> &nodes)
+{
+  WeightedUtilitySelector *usel = new WeightedUtilitySelector;
   usel->utilityNodes = std::move(nodes);
   return usel;
 }
