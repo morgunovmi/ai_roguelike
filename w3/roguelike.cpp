@@ -50,7 +50,7 @@ static void create_fuzzy_monster_beh(flecs::entity e)
           return 140.f - hp;
         }
       )
-    });
+    }, 30.f);
   e.add<WorldInfoGatherer>();
   e.set(BehaviourTree{root});
 }
@@ -90,7 +90,7 @@ static void create_explorer_monster_beh(flecs::entity e)
           return exploreUtility;
         }
       )
-    });
+    }, 30.f);
   e.add<WorldInfoGatherer>();
   e.set(BehaviourTree{root});
 }

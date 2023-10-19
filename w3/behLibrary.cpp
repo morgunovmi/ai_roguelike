@@ -57,13 +57,19 @@ struct Selector : public CompoundNode
 struct UtilitySelector : public BehNode
 {
   std::vector<std::pair<BehNode*, utility_function>> utilityNodes;
+  std::vector<float> nodeInertias;
+  size_t lastSelectedNode = size_t(-1);
+  float choiceInertia;
 
   BehResult update(flecs::world &ecs, flecs::entity entity, Blackboard &bb) override
   {
+    for (auto &inertia : nodeInertias)
+      inertia = std::max(0.f, inertia - 5.f);
+
     std::vector<std::pair<float, size_t>> utilityScores;
     for (size_t i = 0; i < utilityNodes.size(); ++i)
     {
-      const float utilityScore = utilityNodes[i].second(bb);
+      const float utilityScore = utilityNodes[i].second(bb) + nodeInertias[i];
       utilityScores.push_back(std::make_pair(utilityScore, i));
     }
     std::sort(utilityScores.begin(), utilityScores.end(), [](auto &lhs, auto &rhs)
@@ -75,7 +81,14 @@ struct UtilitySelector : public BehNode
       size_t nodeIdx = node.second;
       BehResult res = utilityNodes[nodeIdx].first->update(ecs, entity, bb);
       if (res != BEH_FAIL)
+      {
+        if (nodeIdx != lastSelectedNode)
+        {
+          nodeInertias[nodeIdx] += choiceInertia;
+          lastSelectedNode = nodeIdx;
+        }
         return res;
+      }
     }
     return BEH_FAIL;
   }
@@ -340,10 +353,12 @@ BehNode *selector(const std::vector<BehNode*> &nodes)
   return sel;
 }
 
-BehNode *utility_selector(const std::vector<std::pair<BehNode*, utility_function>> &nodes)
+BehNode *utility_selector(const std::vector<std::pair<BehNode*, utility_function>> &nodes, float choice_inertia)
 {
   UtilitySelector *usel = new UtilitySelector;
   usel->utilityNodes = std::move(nodes);
+  usel->choiceInertia = choice_inertia;
+  usel->nodeInertias = std::vector(usel->utilityNodes.size(), 0.f);
   return usel;
 }
 
