@@ -10,5 +10,6 @@ namespace dmaps
   void gen_hive_pack_map(flecs::world &ecs, std::vector<float> &map);
   void gen_exploration_map(flecs::world &ecs, std::vector<float> &map);
   void gen_ally_map(flecs::world &ecs, std::vector<float> &map, flecs::entity e, const Team &t);
+  void gen_mage_approach_map(flecs::world &ecs, std::vector<float> &map);
 };
 

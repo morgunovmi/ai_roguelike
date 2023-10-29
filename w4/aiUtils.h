@@ -14,6 +14,19 @@ inline int move_towards(const T &from, const U &to)
   return deltaY < 0 ? EA_MOVE_UP : EA_MOVE_DOWN;
 }
 
+inline Position move_pos(Position pos, int action)
+{
+  if (action == EA_MOVE_LEFT)
+    pos.x--;
+  else if (action == EA_MOVE_RIGHT)
+    pos.x++;
+  else if (action == EA_MOVE_UP)
+    pos.y--;
+  else if (action == EA_MOVE_DOWN)
+    pos.y++;
+  return pos;
+}
+
 inline int inverse_move(int move)
 {
   return move == EA_MOVE_LEFT ? EA_MOVE_RIGHT :
