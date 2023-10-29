@@ -123,3 +123,17 @@ void dmaps::gen_exploration_map(flecs::world &ecs, std::vector<float> &map)
   });
 }
 
+void dmaps::gen_ally_map(flecs::world &ecs, std::vector<float> &map, flecs::entity e, const Team &t)
+{
+  query_dungeon_data(ecs, [&](const DungeonData &dd)
+  {
+    init_tiles(map, dd);
+    query_characters_positions(ecs, [&](flecs::entity ee, const Position &epos, const Team &et) {
+      if (et.team == t.team && ee != e)
+      {
+        map[epos.y * dd.width + epos.x] = 0.f;
+      }
+    });
+    process_dmap(map, dd);
+  });
+}

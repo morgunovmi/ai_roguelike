@@ -9,6 +9,8 @@
 #include "dijkstraMapGen.h"
 #include "dmapFollower.h"
 
+#include <sstream>
+
 static flecs::entity create_player_approacher(flecs::entity e)
 {
   e.set(DmapWeights{{{"approach_map", {1.f, 1.f}}}});
@@ -30,6 +32,15 @@ static flecs::entity create_hive_follower(flecs::entity e)
 static flecs::entity create_hive_monster(flecs::entity e)
 {
   e.set(DmapWeights{{{"hive_map", {1.f, 1.f}}, {"approach_map", {1.8, 0.8f}}}});
+  return e;
+}
+
+static flecs::entity create_mage_monster(flecs::entity e)
+{
+  std::stringstream allyMapName;
+  allyMapName << "ally_map_" << e.id();
+  e.set(DmapWeights{{{allyMapName.str().c_str(), {1.f, 1.f}}, {"mage_approach_map", {1.f, 1.f}}}});
+  e.add<Mage>();
   return e;
 }
 
@@ -335,20 +346,19 @@ static void register_roguelike_systems(flecs::world &ecs)
           }
       });
     });
-  ecs.system<const ExplorationData>()
-    .each([&](const ExplorationData &data){
-      for (int y = 0; y < data.height; ++y)
-        for (int x = 0; x < data.width; ++x)
-        {
-          if (!data.data[y * data.width + x])
-          {
-            const Rectangle rect = {float(x) * tile_size, float(y) * tile_size, tile_size, tile_size};
-            DrawRectangleRec(rect, Color{0, 0, 0, 255});
-          }
-        }
-    });
+  // ecs.system<const ExplorationData>()
+  //   .each([&](const ExplorationData &data){
+  //     for (int y = 0; y < data.height; ++y)
+  //       for (int x = 0; x < data.width; ++x)
+  //       {
+  //         if (!data.data[y * data.width + x])
+  //         {
+  //           const Rectangle rect = {float(x) * tile_size, float(y) * tile_size, tile_size, tile_size};
+  //           DrawRectangleRec(rect, Color{0, 0, 0, 255});
+  //         }
+  //       }
+  //   });
 }
-
 
 void init_roguelike(flecs::world &ecs)
 {
@@ -366,18 +376,20 @@ void init_roguelike(flecs::world &ecs)
         UnloadTexture(texture);
       });
 
-  create_hive_monster(create_monster(ecs, Color{0xee, 0x00, 0xee, 0xff}, "minotaur_tex"));
-  create_hive_monster(create_monster(ecs, Color{0xee, 0x00, 0xee, 0xff}, "minotaur_tex"));
-  create_hive_monster(create_monster(ecs, Color{0x11, 0x11, 0x11, 0xff}, "minotaur_tex"));
-  create_hive(create_player_fleer(create_monster(ecs, Color{0, 255, 0, 255}, "minotaur_tex")));
+  // create_hive_monster(create_monster(ecs, Color{0xee, 0x00, 0xee, 0xff}, "minotaur_tex"));
+  // create_hive_monster(create_monster(ecs, Color{0xee, 0x00, 0xee, 0xff}, "minotaur_tex"));
+  // create_hive_monster(create_monster(ecs, Color{0x11, 0x11, 0x11, 0xff}, "minotaur_tex"));
+  // create_hive(create_player_fleer(create_monster(ecs, Color{0, 255, 0, 255}, "minotaur_tex")));
+
+  create_mage_monster(create_monster(ecs, Color{0x11, 0x11, 0x11, 0xff}, "minotaur_tex"));
+  create_mage_monster(create_monster(ecs, Color{0x11, 0x11, 0x11, 0xff}, "minotaur_tex"));
+  create_mage_monster(create_monster(ecs, Color{0x11, 0x11, 0x11, 0xff}, "minotaur_tex"));
 
   create_player(ecs, "swordsman_tex");
 
   ecs.entity("world")
     .set(TurnCounter{})
     .set(ActionLog{});
-
-  update_exploration_data(ecs);
 
   std::vector<float> approachMap;
   dmaps::gen_player_approach_map(ecs, approachMap);
@@ -399,6 +411,33 @@ void init_roguelike(flecs::world &ecs)
   dmaps::gen_exploration_map(ecs, explorationMap);
   ecs.entity("exploration_map")
     .set(DijkstraMapData{explorationMap});
+
+  update_mage_ally_maps(ecs);
+}
+
+void update_ally_map(flecs::world &ecs, flecs::entity e, const Team &t)
+{
+  std::vector<float> allyMap;
+  dmaps::gen_ally_map(ecs, allyMap, e, t);
+  std::stringstream allyMapName;
+  allyMapName << "ally_map_" << e.id();
+  ecs.entity(allyMapName.str().c_str())
+    .set(DijkstraMapData{allyMap});
+}
+
+void update_mage_ally_maps(flecs::world &ecs)
+{
+  static auto mageQuery = ecs.query<const Mage, const Hitpoints, const Team, DmapWeights>();
+  mageQuery.each([&](flecs::entity e, const Mage &, const Hitpoints &hp, const Team &t, DmapWeights &dw) {
+    update_ally_map(ecs, e, t);
+    std::stringstream allyMapName;
+    allyMapName << "ally_map_" << e.id();
+    auto &allyWeights = dw.weights[allyMapName.str().c_str()];
+    if (hp.hitpoints < 60.f)
+      allyWeights = {1.5f, 1.1f};
+    else
+      allyWeights = {0.5f, 1.0f};
+  });
 }
 
 void update_exploration_data(flecs::world &ecs)
@@ -670,6 +709,8 @@ void process_turn(flecs::world &ecs)
     dmaps::gen_exploration_map(ecs, explorationMap);
     ecs.entity("exploration_map")
       .set(DijkstraMapData{explorationMap});
+
+    update_mage_ally_maps(ecs);
 
     ecs.entity("exploration_map").add<VisualiseMap>();
     // ecs.entity("hive_follower_sum")

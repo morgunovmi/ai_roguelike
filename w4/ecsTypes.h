@@ -172,3 +172,4 @@ struct DmapWeights
 };
 
 struct Hive {};
+struct Mage {};
