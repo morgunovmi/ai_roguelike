@@ -152,6 +152,13 @@ struct DijkstraMapData
   std::vector<float> map;
 };
 
+struct ExplorationData
+{
+  std::vector<bool> data;
+  size_t width;
+  size_t height;
+};
+
 struct VisualiseMap {};
 
 struct DmapWeights

@@ -106,3 +106,20 @@ void dmaps::gen_hive_pack_map(flecs::world &ecs, std::vector<float> &map)
   });
 }
 
+void dmaps::gen_exploration_map(flecs::world &ecs, std::vector<float> &map)
+{
+  static auto explorationQuery = ecs.query<const ExplorationData>();
+  query_dungeon_data(ecs, [&](const DungeonData &dd) {
+    init_tiles(map, dd);
+    explorationQuery.each([&](const ExplorationData &data) {
+      for (int y = 0; y < data.height; ++y)
+        for (int x = 0; x < data.width; ++x)
+        {
+          if (dd.tiles[data.width * y + x] != dungeon::wall && !data.data[data.width * y + x])
+            map[dd.width * y + x] = 0.f;
+        }
+    });
+    process_dmap(map, dd);
+  });
+}
+

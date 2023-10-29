@@ -181,11 +181,42 @@ static void create_powerup(flecs::world &ecs, int x, int y, float amount)
     .set(Color{0xff, 0xff, 0x00, 0xff});
 }
 
+static void choose_exploration_action(flecs::world &ecs, Action &act, const Position &pos, const DungeonData &dd)
+{
+  auto get_dmap_at = [&](const DijkstraMapData &dmap, const DungeonData &dd, size_t x, size_t y)
+  {
+    const float v = dmap.map[y * dd.width + x];
+    if (v < 1e5f)
+      return v;
+    return v;
+  };
+
+  float moveWeights[EA_MOVE_END];
+  for (size_t i = 0; i < EA_MOVE_END; ++i)
+    moveWeights[i] = 0.f;
+
+  ecs.entity("exploration_map").get([&](const DijkstraMapData &dmap)
+  {
+    moveWeights[EA_NOP]         += get_dmap_at(dmap, dd, pos.x+0, pos.y+0);
+    moveWeights[EA_MOVE_LEFT]   += get_dmap_at(dmap, dd, pos.x-1, pos.y+0);
+    moveWeights[EA_MOVE_RIGHT]  += get_dmap_at(dmap, dd, pos.x+1, pos.y+0);
+    moveWeights[EA_MOVE_UP]     += get_dmap_at(dmap, dd, pos.x+0, pos.y-1);
+    moveWeights[EA_MOVE_DOWN]   += get_dmap_at(dmap, dd, pos.x+0, pos.y+1);
+  });
+  float minWt = moveWeights[EA_NOP];
+  for (size_t i = 0; i < EA_MOVE_END; ++i)
+    if (moveWeights[i] < minWt)
+    {
+      minWt = moveWeights[i];
+      act.action = i;
+    }
+}
+
 static void register_roguelike_systems(flecs::world &ecs)
 {
   static auto dungeonDataQuery = ecs.query<const DungeonData>();
-  ecs.system<PlayerInput, Action, const IsPlayer>()
-    .each([&](PlayerInput &inp, Action &a, const IsPlayer)
+  ecs.system<PlayerInput, Action, const IsPlayer, const Position>()
+    .each([&](PlayerInput &inp, Action &a, const IsPlayer, const Position &pos)
     {
       bool left = IsKeyDown(KEY_LEFT);
       bool right = IsKeyDown(KEY_RIGHT);
@@ -208,6 +239,13 @@ static void register_roguelike_systems(flecs::world &ecs)
       if (pass && !inp.passed)
         a.action = EA_PASS;
       inp.passed = pass;
+
+      if (IsKeyDown(KEY_ENTER))
+      {
+        dungeonDataQuery.each([&](const DungeonData &dd) {
+          choose_exploration_action(ecs, a, pos, dd);
+        });
+      }
     });
   ecs.system<const Position, const Color>()
     .term<TextureSource>(flecs::Wildcard)
@@ -297,6 +335,18 @@ static void register_roguelike_systems(flecs::world &ecs)
           }
       });
     });
+  ecs.system<const ExplorationData>()
+    .each([&](const ExplorationData &data){
+      for (int y = 0; y < data.height; ++y)
+        for (int x = 0; x < data.width; ++x)
+        {
+          if (!data.data[y * data.width + x])
+          {
+            const Rectangle rect = {float(x) * tile_size, float(y) * tile_size, tile_size, tile_size};
+            DrawRectangleRec(rect, Color{0, 0, 0, 255});
+          }
+        }
+    });
 }
 
 
@@ -326,6 +376,46 @@ void init_roguelike(flecs::world &ecs)
   ecs.entity("world")
     .set(TurnCounter{})
     .set(ActionLog{});
+
+  update_exploration_data(ecs);
+
+  std::vector<float> approachMap;
+  dmaps::gen_player_approach_map(ecs, approachMap);
+  ecs.entity("approach_map")
+    .set(DijkstraMapData{approachMap});
+
+  std::vector<float> fleeMap;
+  dmaps::gen_player_flee_map(ecs, fleeMap);
+  ecs.entity("flee_map")
+    .set(DijkstraMapData{fleeMap});
+
+  std::vector<float> hiveMap;
+  dmaps::gen_hive_pack_map(ecs, hiveMap);
+  ecs.entity("hive_map")
+    .set(DijkstraMapData{hiveMap});
+
+  update_exploration_data(ecs);
+  std::vector<float> explorationMap;
+  dmaps::gen_exploration_map(ecs, explorationMap);
+  ecs.entity("exploration_map")
+    .set(DijkstraMapData{explorationMap});
+}
+
+void update_exploration_data(flecs::world &ecs)
+{
+  static auto playerPosQuery = ecs.query<const IsPlayer, const Position>();
+  static auto explorationDataQuery = ecs.query<ExplorationData>();
+  playerPosQuery.each([&](const IsPlayer, const Position &playerPos) {
+    explorationDataQuery.each([&](ExplorationData &data) {
+      for (size_t y = 0; y < data.height; ++y)
+        for (size_t x = 0; x < data.width; ++x)
+        {
+          size_t i = y * data.width + x;
+          if (dist(playerPos, Position{(int)x, (int)y}) <= 2)
+            data.data[i] = data.data[i] | true;
+        }
+    });
+  });
 }
 
 void init_dungeon(flecs::world &ecs, char *tiles, size_t w, size_t h)
@@ -342,6 +432,11 @@ void init_dungeon(flecs::world &ecs, char *tiles, size_t w, size_t h)
       dungeonData[y * w + x] = tiles[y * w + x];
   ecs.entity("dungeon")
     .set(DungeonData{dungeonData, w, h});
+
+  std::vector<bool> explorationData;
+  explorationData.resize(w * h);
+  ecs.entity("explorationData")
+    .set(ExplorationData{explorationData, w, h});
 
   for (size_t y = 0; y < h; ++y)
     for (size_t x = 0; x < w; ++x)
@@ -570,10 +665,16 @@ void process_turn(flecs::world &ecs)
     ecs.entity("hive_map")
       .set(DijkstraMapData{hiveMap});
 
-    //ecs.entity("flee_map").add<VisualiseMap>();
-    ecs.entity("hive_follower_sum")
-      .set(DmapWeights{{{"hive_map", {1.f, 1.f}}, {"approach_map", {1.8f, 0.8f}}}})
-      .add<VisualiseMap>();
+    update_exploration_data(ecs);
+    std::vector<float> explorationMap;
+    dmaps::gen_exploration_map(ecs, explorationMap);
+    ecs.entity("exploration_map")
+      .set(DijkstraMapData{explorationMap});
+
+    ecs.entity("exploration_map").add<VisualiseMap>();
+    // ecs.entity("hive_follower_sum")
+    //   .set(DmapWeights{{{"hive_map", {1.f, 1.f}}, {"approach_map", {1.8f, 0.8f}}}})
+    //   .add<VisualiseMap>();
   }
 }
 
