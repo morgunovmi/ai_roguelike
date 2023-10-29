@@ -347,18 +347,18 @@ static void register_roguelike_systems(flecs::world &ecs)
           }
       });
     });
-  // ecs.system<const ExplorationData>()
-  //   .each([&](const ExplorationData &data){
-  //     for (int y = 0; y < data.height; ++y)
-  //       for (int x = 0; x < data.width; ++x)
-  //       {
-  //         if (!data.data[y * data.width + x])
-  //         {
-  //           const Rectangle rect = {float(x) * tile_size, float(y) * tile_size, tile_size, tile_size};
-  //           DrawRectangleRec(rect, Color{0, 0, 0, 255});
-  //         }
-  //       }
-  //   });
+  ecs.system<const ExplorationData>()
+    .each([&](const ExplorationData &data){
+      for (int y = 0; y < data.height; ++y)
+        for (int x = 0; x < data.width; ++x)
+        {
+          if (!data.data[y * data.width + x])
+          {
+            const Rectangle rect = {float(x) * tile_size, float(y) * tile_size, tile_size, tile_size};
+            DrawRectangleRec(rect, Color{0, 0, 0, 255});
+          }
+        }
+    });
 }
 
 void init_roguelike(flecs::world &ecs)
@@ -454,7 +454,8 @@ void update_exploration_data(flecs::world &ecs)
         for (size_t x = 0; x < data.width; ++x)
         {
           size_t i = y * data.width + x;
-          if (dist(playerPos, Position{(int)x, (int)y}) <= 2)
+          if (abs(playerPos.x - int(x)) <= 2
+              && abs(playerPos.y - int(y)) <= 2)
             data.data[i] = data.data[i] | true;
         }
     });
@@ -707,7 +708,7 @@ void process_turn(flecs::world &ecs)
     ecs.entity("mage_approach_map")
       .set(DijkstraMapData{mageApproachMap});
 
-    ecs.entity("mage_approach_map").add<VisualiseMap>();
+    // ecs.entity("mage_approach_map").add<VisualiseMap>();
     // ecs.entity("hive_follower_sum")
     //   .set(DmapWeights{{{"hive_map", {1.f, 1.f}}, {"approach_map", {1.8f, 0.8f}}}})
     //   .add<VisualiseMap>();
