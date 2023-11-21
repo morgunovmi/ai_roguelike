@@ -82,6 +82,61 @@ float goap::make_plan(const Planner &planner, const WorldState &from, const Worl
   return 0.f;
 }
 
+float ida_star_search(const goap::Planner &planner, std::vector<goap::PlanStep> &path, const float g, const float bound, const goap::WorldState &to)
+{
+  const goap::PlanStep s = path.back();
+  const float f = g + heuristic(s.worldState, to);
+  if (f > bound)
+    return f;
+  if (heuristic(s.worldState, to) == 0)
+    return -f;
+  float min = FLT_MAX;
+  auto checkNeighbour = [&](size_t actId) -> float
+  {
+    goap::WorldState st = goap::apply_action(planner, actId, s.worldState);
+    if (std::find_if(path.begin(), path.end(), [&](const goap::PlanStep &rhs)
+                     { return st == rhs.worldState; }) != path.end())
+      return 0.f;
+    path.push_back({ actId, st });
+    float gScore = g + goap::get_action_cost(planner, actId);
+    const float t = ida_star_search(planner, path, gScore, bound, to);
+    if (t < 0.f)
+      return t;
+    if (t < min)
+      min = t;
+    path.pop_back();
+    return t;
+  };
+
+  std::vector<size_t> transitions = find_valid_state_transitions(planner, s.worldState);
+  for (size_t actId : transitions)
+  {
+    float val = checkNeighbour(actId);
+    if (val < 0.f) return val;
+  }
+  return min;
+}
+
+void goap::make_plan_ida_star(const Planner &planner, const WorldState &from, const WorldState &to, std::vector<PlanStep> &plan)
+{
+  float bound = heuristic(from, to);
+  std::vector<PlanStep> path = {{0, from}};
+  while (true)
+  {
+    const float t = ida_star_search(planner, path, 0.f, bound, to);
+    if (t < 0.f)
+    {
+      plan = std::move(path);
+      return;
+    }
+    if (t == FLT_MAX)
+      break;
+    bound = t;
+    printf("new bound %0.1f\n", bound);
+  }
+  plan = {};
+}
+
 void goap::print_plan(const Planner &planner, const WorldState &init, const std::vector<PlanStep> &plan)
 {
   printf("%15s: ", "");

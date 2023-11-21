@@ -67,7 +67,7 @@ std::vector<size_t> goap::find_valid_state_transitions(const Planner &planner, c
   return res;
 }
 
-goap::WorldState goap::apply_action(const Planner &planner, size_t act, const WorldState &from)
+goap::WorldState goap::apply_action(const Planner &planner, size_t act, WorldState from)
 {
   WorldState res = from;
   const Action &action = planner.actions[act];

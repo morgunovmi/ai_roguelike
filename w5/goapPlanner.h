@@ -33,7 +33,7 @@ namespace goap
   float get_action_cost(const Planner &planner, size_t act_id);
 
   std::vector<size_t> find_valid_state_transitions(const Planner &planner, const WorldState &from);
-  WorldState apply_action(const Planner &planner, size_t act, const WorldState &from);
+  WorldState apply_action(const Planner &planner, size_t act, WorldState from);
 
   struct PlanStep
   {
@@ -42,6 +42,7 @@ namespace goap
   };
 
   float make_plan(const Planner &planner, const WorldState &from, const WorldState &to, std::vector<PlanStep> &plan);
+  void make_plan_ida_star(const Planner &planner, const WorldState &from, const WorldState &to, std::vector<PlanStep> &plan);
   void print_plan(const Planner &planner, const WorldState &init, const std::vector<PlanStep> &plan);
 };
 
