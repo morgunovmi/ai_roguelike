@@ -120,7 +120,7 @@ float ida_star_search(const goap::Planner &planner, std::vector<goap::PlanStep> 
 void goap::make_plan_ida_star(const Planner &planner, const WorldState &from, const WorldState &to, std::vector<PlanStep> &plan)
 {
   float bound = heuristic(from, to);
-  std::vector<PlanStep> path = {{0, from}};
+  std::vector<PlanStep> path = {{size_t(-1), from}};
   while (true)
   {
     const float t = ida_star_search(planner, path, 0.f, bound, to);
@@ -161,6 +161,10 @@ void goap::print_plan(const Planner &planner, const WorldState &init, const std:
   printf("\n");
   for (const PlanStep &step : plan)
   {
+    // Just to skip the initial world state because it's the first step in the plan in case of ida_star
+    if (heuristic(step.worldState, init) == 0)
+      continue;
+
     printf("%15s: ", planner.actions[step.action].name.c_str());
     for (size_t i = 0; i < step.worldState.size(); ++i)
       printf("|%*d|", dlen[i], step.worldState[i]);
